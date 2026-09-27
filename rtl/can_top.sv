@@ -22,6 +22,12 @@ module can_top (
   logic sample_point, tx_point, rx_sync;
   logic can_tx_internal, can_rx_internal;
   
+  logic tx_crc_en, tx_crc_clear;
+  logic [14:0] tx_crc_out;
+  
+  logic rx_crc_en, rx_crc_clear;
+  logic [14:0] rx_crc_out;
+  
   // Instance: Bit Timing
   can_btr u_btr (
     .clk(clk),
@@ -32,11 +38,21 @@ module can_top (
     .tx_point(tx_point)
   );
 
+  // Instance: TX CRC
+  can_crc u_tx_crc (
+    .clk(clk),
+    .rst_n(rst_n),
+    .enable(tx_crc_en && tx_point), // Advance on tx_point
+    .data_in(can_tx_internal),      // Hash the output stream
+    .clear(tx_crc_clear),
+    .crc_out(tx_crc_out)
+  );
+
   // Instance: TX Engine
   can_tx u_tx (
     .clk(clk),
     .rst_n(rst_n),
-    .tx_frame('0), // Tied off for prototype compilation
+    .tx_frame('0),
     .tx_req(1'b0),
     .tx_ack(),
     .tx_done(),
@@ -45,7 +61,20 @@ module can_top (
     .stuff_en(),
     .stuff_data_in(),
     .stuff_data_out(1'b1),
-    .stuff_stall(1'b0)
+    .stuff_stall(1'b0),
+    .crc_en(tx_crc_en),
+    .crc_clear(tx_crc_clear),
+    .crc_in(tx_crc_out)
+  );
+  
+  // Instance: RX CRC
+  can_crc u_rx_crc (
+    .clk(clk),
+    .rst_n(rst_n),
+    .enable(rx_crc_en && sample_point),
+    .data_in(can_rx_internal),
+    .clear(rx_crc_clear),
+    .crc_out(rx_crc_out)
   );
   
   // Instance: RX Engine
@@ -58,7 +87,10 @@ module can_top (
     .rx_sync(rx_sync),
     .can_rx_in(can_rx_internal),
     .destuff_bit(can_rx_internal),
-    .destuff_err(1'b0)
+    .destuff_err(1'b0),
+    .crc_en(rx_crc_en),
+    .crc_clear(rx_crc_clear),
+    .crc_in(rx_crc_out)
   );
   
   // Instance: Fault Injector
